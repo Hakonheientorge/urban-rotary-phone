@@ -3,9 +3,104 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hello World</title>
+  <title>Halden Weather</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 2rem; max-width: 720px; margin: auto; }
+    button { padding: .5rem 1rem; font-size: 1rem; }
+    .card { background:#f8f9fb; padding: 1rem; border-radius: 8px; margin-top: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    pre { white-space: pre-wrap; word-break: break-word; }
+  </style>
 </head>
 <body>
-  <h1>hello world</h1>
+  <h1>Weather in Halden</h1>
+  <p>This page uses the Norwegian Meteorological Institute API (api.met.no) to fetch the current forecast for Halden (lat 59.1268, lon 11.3873).</p>
+  <p>
+    <button id="getWeather">Get weather for Halden</button>
+    <button id="autoWeather">Auto-refresh (30s)</button>
+  </p>
+  <div id="output" class="card" aria-live="polite">Click "Get weather for Halden" to fetch data.</div>
+
+  <script>
+    // Coordinates for Halden
+    const LAT = 59.1268;
+    const LON = 11.3873;
+
+    // IMPORTANT: The met.no API requires a proper User-Agent including contact information.
+    // Replace the string below with an email or URL if you want to comply with their policy.
+    const USER_AGENT = 'github.com/Hakonheientorge/urban-rotary-phone';
+
+    const output = document.getElementById('output');
+    const btn = document.getElementById('getWeather');
+    const autoBtn = document.getElementById('autoWeather');
+    let autoInterval = null;
+
+    function renderError(err){
+      output.innerHTML = '<strong>Error:</strong> ' + String(err);
+    }
+
+    function displayForecast(data){
+      try{
+        const ts = data.properties.timeseries[0];
+        const time = ts.time;
+        const instant = ts.data.instant && ts.data.instant.details ? ts.data.instant.details : {};
+        const temp = instant.air_temperature !== undefined ? instant.air_temperature + ' °C' : 'N/A';
+        let summary = 'N/A';
+        let precipitation = 'N/A';
+
+        if(ts.data.next_1_hours){
+          summary = ts.data.next_1_hours.summary && ts.data.next_1_hours.summary.symbol_code ? ts.data.next_1_hours.summary.symbol_code : summary;
+          precipitation = ts.data.next_1_hours.details && ts.data.next_1_hours.details.precipitation_amount !== undefined ? ts.data.next_1_hours.details.precipitation_amount + ' mm' : precipitation;
+        } else if(ts.data.next_6_hours){
+          summary = ts.data.next_6_hours.summary && ts.data.next_6_hours.summary.symbol_code ? ts.data.next_6_hours.summary.symbol_code : summary;
+        }
+
+        output.innerHTML = `
+          <strong>Time (UTC):</strong> ${time} <br>
+          <strong>Temperature:</strong> ${temp} <br>
+          <strong>Precipitation (next 1h):</strong> ${precipitation} <br>
+          <strong>Symbol:</strong> ${summary} <br>
+          <hr>
+          <details>
+            <summary>Raw JSON (first timeseries)</summary>
+            <pre>${JSON.stringify(ts, null, 2)}</pre>
+          </details>
+        `;
+      } catch(e){
+        renderError(e);
+      }
+    }
+
+    async function fetchWeather(){
+      output.textContent = 'Fetching...';
+      const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${LAT}&lon=${LON}`;
+      try{
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': 'application/json'
+          }
+        });
+        if(!res.ok) throw new Error('Network response was not ok: ' + res.status + ' ' + res.statusText);
+        const data = await res.json();
+        displayForecast(data);
+      } catch(err){
+        renderError(err);
+      }
+    }
+
+    btn.addEventListener('click', fetchWeather);
+
+    autoBtn.addEventListener('click', () => {
+      if(autoInterval){
+        clearInterval(autoInterval);
+        autoInterval = null;
+        autoBtn.textContent = 'Auto-refresh (30s)';
+      } else {
+        fetchWeather();
+        autoInterval = setInterval(fetchWeather, 30000);
+        autoBtn.textContent = 'Stop auto-refresh';
+      }
+    });
+  </script>
 </body>
 </html>
